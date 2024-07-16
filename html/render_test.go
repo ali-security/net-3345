@@ -6,6 +6,8 @@ package html
 
 import (
 	"bytes"
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -162,5 +164,39 @@ func TestRenderer(t *testing.T) {
 	}
 	if got := b.String(); got != want {
 		t.Errorf("got vs want:\n%s\n%s\n", got, want)
+	}
+}
+
+func TestRenderTextNodes(t *testing.T) {
+	elements := []string{"style", "script", "xmp", "iframe", "noembed", "noframes", "plaintext", "noscript"}
+	for _, namespace := range []string{
+		"", // html
+		"svg",
+		"math",
+	} {
+		for _, e := range elements {
+			var namespaceOpen, namespaceClose string
+			if namespace != "" {
+				namespaceOpen, namespaceClose = fmt.Sprintf("<%s>", namespace), fmt.Sprintf("</%s>", namespace)
+			}
+			doc := fmt.Sprintf(`<html><head></head><body>%s<%s>&</%s>%s</body></html>`, namespaceOpen, e, e, namespaceClose)
+			n, err := Parse(strings.NewReader(doc))
+			if err != nil {
+				t.Fatal(err)
+			}
+			b := bytes.NewBuffer(nil)
+			if err := Render(b, n); err != nil {
+				t.Fatal(err)
+			}
+
+			expected := doc
+			if namespace != "" {
+				expected = strings.Replace(expected, "&", "&amp;", 1)
+			}
+
+			if b.String() != expected {
+				t.Errorf("unexpected output: got %q, want %q", b.String(), expected)
+			}
+		}
 	}
 }
