@@ -6457,3 +6457,29 @@ func TestTransportReuseAfterError(t *testing.T) {
 	})
 	<-req1c
 }
+
+// TestTransportRejectsInvalidSettings verifies that the Transport rejects a
+// SETTINGS frame carrying an invalid value (here SETTINGS_MAX_FRAME_SIZE=0)
+// with a connection error, rather than applying it. Previously such a frame
+// could leave the connection in a state that hangs indefinitely
+// (https://go.dev/issue/78476).
+func TestTransportRejectsInvalidSettings(t *testing.T) {
+	var buf bytes.Buffer
+	fr := NewFramer(&buf, &buf)
+	if err := fr.WriteSettings(Setting{ID: SettingMaxFrameSize, Val: 0}); err != nil {
+		t.Fatal(err)
+	}
+	f, err := fr.ReadFrame()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sf, ok := f.(*SettingsFrame)
+	if !ok {
+		t.Fatalf("read %T, want *SettingsFrame", f)
+	}
+
+	rl := &clientConnReadLoop{cc: &ClientConn{}}
+	if err := rl.processSettingsNoWrite(sf); err == nil {
+		t.Fatal("processSettingsNoWrite accepted SETTINGS_MAX_FRAME_SIZE=0; want a connection error")
+	}
+}
